@@ -499,11 +499,28 @@ def build_report():
             "Add authentication, encrypted storage, retention controls, and distributed tracing.",
         ],
     )
-    doc.add_paragraph()
+
+    doc.add_heading("9. Repository and Submission Package", level=1)
+    doc.add_paragraph(
+        "The public repository contains the complete runnable implementation and all evidence "
+        "needed to inspect or reproduce the project:"
+    )
+    add_bullets(
+        doc,
+        [
+            "src/pymentor/: LangGraph workflow, specialist agents, hybrid retriever, memory, guardrails, and model providers.",
+            "app.py: Streamlit live-demo interface.",
+            "data/: source-tagged introductory Python knowledge base.",
+            "evaluation/: 32-case evaluation suite, RAGAS and LLM-judge scripts, and measured result files.",
+            "tests/: 14 deterministic regression tests.",
+            "README.md and .env.example: installation, configuration, Ollama setup, and run instructions.",
+            "docs/ and deliverables/: architecture, written report, tool disclosure, and supporting documentation.",
+        ],
+    )
     p = doc.add_paragraph()
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     r = p.add_run(
-        "GitHub repository: https://github.com/Tikaaaaaaa/"
+        "Public GitHub repository: https://github.com/Tikaaaaaaa/"
         "pymentor-personalized-python-tutor"
     )
     r.bold = True

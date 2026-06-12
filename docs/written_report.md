@@ -169,3 +169,15 @@ and evidence-driven evaluation. Its architecture prioritizes learning behavior o
 answer generation and remains runnable with either Groq or the local `qwen3:4b` Ollama model.
 
 **GitHub repository:** https://github.com/Tikaaaaaaa/pymentor-personalized-python-tutor
+
+## Repository and submission package
+
+The public repository contains the complete runnable implementation and supporting evidence:
+
+- `src/pymentor/`: LangGraph workflow, specialist agents, hybrid retriever, memory, guardrails, and model providers
+- `app.py`: Streamlit live-demo interface
+- `data/`: source-tagged introductory Python knowledge base
+- `evaluation/`: 32-case evaluation suite, RAGAS and LLM-judge scripts, and measured results
+- `tests/`: 14 deterministic regression tests
+- `README.md` and `.env.example`: installation, configuration, Ollama setup, and run instructions
+- `docs/` and `deliverables/`: architecture, report, disclosure, and supporting documentation
