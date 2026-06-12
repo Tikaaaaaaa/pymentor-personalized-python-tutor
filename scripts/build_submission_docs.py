@@ -7,6 +7,7 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Inches, Pt, RGBColor
+from PIL import Image, ImageDraw, ImageFont
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -17,6 +18,158 @@ NAVY = "1F3A5F"
 BLUE = "2E74B5"
 LIGHT = "F2F4F7"
 MUTED = RGBColor(90, 100, 112)
+ARCHITECTURE_IMAGE = ROOT / "docs" / "pymentor_architecture.png"
+
+
+def build_architecture_diagram():
+    width, height = 1900, 760
+    image = Image.new("RGB", (width, height), "white")
+    draw = ImageDraw.Draw(image)
+    regular = ImageFont.truetype("/System/Library/Fonts/Supplemental/Arial.ttf", 20)
+    small = ImageFont.truetype("/System/Library/Fonts/Supplemental/Arial.ttf", 17)
+    bold = ImageFont.truetype("/System/Library/Fonts/Supplemental/Arial Bold.ttf", 21)
+    label = ImageFont.truetype("/System/Library/Fonts/Supplemental/Arial Bold.ttf", 15)
+    title_font = ImageFont.truetype("/System/Library/Fonts/Supplemental/Arial Bold.ttf", 36)
+
+    colors = {
+        "navy": "#1F3A5F",
+        "blue": "#2E74B5",
+        "light_blue": "#EAF2F8",
+        "light": "#F2F4F7",
+        "green": "#E8F5E9",
+        "gold": "#FFF4D6",
+        "ink": "#17202A",
+        "muted": "#5A6470",
+    }
+
+    def centered_text(y, text, font, fill):
+        text_box = draw.textbbox((0, 0), text, font=font)
+        text_w = text_box[2] - text_box[0]
+        draw.text(((width - text_w) / 2, y), text, font=font, fill=fill)
+
+    def box(x, y, w, h, title, subtitle="", fill=None, outline=None):
+        draw.rounded_rectangle(
+            (x, y, x + w, y + h),
+            radius=16,
+            fill=fill or colors["light"],
+            outline=outline or colors["blue"],
+            width=3,
+        )
+        title_box = draw.textbbox((0, 0), title, font=bold)
+        title_w = title_box[2] - title_box[0]
+        draw.text(
+            (x + (w - title_w) / 2, y + 13),
+            title,
+            font=bold,
+            fill=colors["navy"],
+        )
+        if subtitle:
+            subtitle_box = draw.textbbox((0, 0), subtitle, font=small)
+            subtitle_w = subtitle_box[2] - subtitle_box[0]
+            draw.text(
+                (x + (w - subtitle_w) / 2, y + 49),
+                subtitle,
+                font=small,
+                fill=colors["muted"],
+            )
+
+    def arrow(points, color=None, width_px=4):
+        color = color or colors["blue"]
+        draw.line(points, fill=color, width=width_px, joint="curve")
+        x1, y1 = points[-2]
+        x2, y2 = points[-1]
+        if abs(x2 - x1) >= abs(y2 - y1):
+            direction = 1 if x2 > x1 else -1
+            head = [(x2, y2), (x2 - 13 * direction, y2 - 8), (x2 - 13 * direction, y2 + 8)]
+        else:
+            direction = 1 if y2 > y1 else -1
+            head = [(x2, y2), (x2 - 8, y2 - 13 * direction), (x2 + 8, y2 - 13 * direction)]
+        draw.polygon(head, fill=color)
+
+    centered_text(18, "PyMentor LangGraph Architecture", title_font, colors["navy"])
+    centered_text(
+        63,
+        "Bounded supervisor routing with shared guardrails and persistent learner memory",
+        regular,
+        colors["muted"],
+    )
+
+    learner = (25, 300, 150, 90)
+    memory = (215, 300, 205, 90)
+    input_guard = (460, 300, 210, 90)
+    supervisor = (710, 300, 190, 90)
+    specialists = [
+        ((1010, 105, 220, 80), "Advanced Retriever", "hybrid retrieval"),
+        ((1010, 215, 220, 80), "Quiz Agent", "contextual exercise"),
+        ((1010, 325, 220, 80), "Feedback", "progress and gaps"),
+        ((1010, 435, 220, 80), "Planner", "learning path"),
+        ((1010, 545, 220, 80), "Scope Response", "bounded redirect"),
+    ]
+    explainer = (1270, 105, 200, 80)
+    output_guard = (1515, 300, 205, 90)
+    persist = (1755, 300, 120, 90)
+
+    box(*learner, "Learner", "Streamlit UI", colors["light_blue"])
+    box(*memory, "Load Memory", "session + profile", colors["green"])
+    box(*input_guard, "Input Guardrails", "injection + scope", colors["gold"])
+    box(*supervisor, "Supervisor", "intent routing", colors["light_blue"])
+    for dimensions, node_title, subtitle in specialists:
+        box(*dimensions, node_title, subtitle, colors["light_blue"])
+    box(*explainer, "Explainer", "grounded teaching", colors["light_blue"])
+    box(*output_guard, "Output Guardrails", "redaction + leakage", colors["gold"])
+    box(*persist, "Persist", "state + trace", colors["green"])
+
+    arrow([(175, 345), (215, 345)])
+    arrow([(420, 345), (460, 345)])
+    arrow([(670, 345), (710, 345)])
+
+    route_x = 955
+    draw.line((900, 345, route_x, 345), fill=colors["blue"], width=4)
+    draw.line((route_x, 145, route_x, 585), fill=colors["blue"], width=4)
+    branch_labels = ["LEARN / ANSWER", "QUIZ", "PROGRESS", "PLAN", "OUTSIDE SCOPE"]
+    for (dimensions, _, _), branch_label in zip(specialists, branch_labels):
+        center_y = dimensions[1] + dimensions[3] // 2
+        arrow([(route_x, center_y), (dimensions[0], center_y)])
+        label_box = draw.textbbox((0, 0), branch_label, font=label)
+        label_width = label_box[2] - label_box[0]
+        label_y = center_y + 22 if branch_label == "PROGRESS" else center_y - 8
+        draw.text(
+            (route_x - label_width - 10, label_y),
+            branch_label,
+            font=label,
+            fill=colors["muted"],
+        )
+
+    arrow([(1230, 145), (1270, 145)])
+
+    merge_x = 1492
+    draw.line((merge_x, 145, merge_x, 585), fill=colors["blue"], width=4)
+    terminal_boxes = [explainer] + [dimensions for dimensions, _, _ in specialists[1:]]
+    for dimensions in terminal_boxes:
+        center_y = dimensions[1] + dimensions[3] // 2
+        draw.line(
+            (dimensions[0] + dimensions[2], center_y, merge_x, center_y),
+            fill=colors["blue"],
+            width=4,
+        )
+    arrow([(merge_x, 345), (1515, 345)])
+    arrow([(1720, 345), (1755, 345)])
+
+    arrow(
+        [(1815, 390), (1815, 680), (100, 680), (100, 390)],
+        colors["navy"],
+        3,
+    )
+    centered_text(
+        700,
+        "Persistent state informs the learner's next interaction",
+        small,
+        colors["muted"],
+    )
+
+    ARCHITECTURE_IMAGE.parent.mkdir(parents=True, exist_ok=True)
+    image.save(ARCHITECTURE_IMAGE)
+    return ARCHITECTURE_IMAGE
 
 
 def set_cell_shading(cell, fill):
@@ -187,6 +340,21 @@ def build_report():
         "student and session IDs, current message, routed intent, topic, profile, recent "
         "dialogue, retrieved contexts, confidence, guardrail flags, draft response, and final response."
     )
+    architecture_path = build_architecture_diagram()
+    p = doc.add_paragraph()
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p.paragraph_format.space_after = Pt(2)
+    p.add_run().add_picture(str(architecture_path), width=Inches(6.75))
+    caption = doc.add_paragraph()
+    caption.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    caption.paragraph_format.space_after = Pt(4)
+    r = caption.add_run(
+        "Figure 1. PyMentor architecture: bounded LangGraph routing with shared "
+        "guardrails and persistent learner memory."
+    )
+    r.italic = True
+    r.font.size = Pt(8.5)
+    r.font.color.rgb = MUTED
     add_table(
         doc,
         ["Node", "Responsibility"],
@@ -365,6 +533,8 @@ def build_disclosure():
         ("Streamlit", "Interactive live-demo interface with visible sources and flags."),
         ("RAGAS", "Final faithfulness and retrieval evaluation."),
         ("Pytest", "Deterministic tests for retrieval, memory, and guardrails."),
+        ("python-docx", "Generates the formatted report and disclosure documents."),
+        ("Pillow", "Renders the system-architecture figure used in the report."),
         ("Synthetic Python notes", "Controlled CSAI 106-level grounding corpus."),
         ("Synthetic test conversations", "32 cases across personas, edge cases, and attacks."),
         ("OpenAI Codex", "Assisted guideline analysis, implementation, documentation, and testing; all work remains the team's responsibility."),

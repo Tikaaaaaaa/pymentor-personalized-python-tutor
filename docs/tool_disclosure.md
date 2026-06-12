@@ -15,6 +15,8 @@
 | Streamlit | Provides the interactive live-demo chat interface and displays grounding sources. |
 | RAGAS | Evaluates faithfulness and retrieval quality for baseline-versus-final RAG comparison. |
 | Pytest | Runs deterministic tests for retrieval, memory persistence, scope control, and adversarial guardrails. |
+| python-docx | Produces the formatted written report and tool-disclosure Word files. |
+| Pillow | Renders the professional system-architecture figure included in the report. |
 | Synthetic CSAI 106 knowledge notes | Controlled Python curriculum corpus authored for this project from standard introductory concepts; provides known ground truth. |
 | Synthetic evaluation conversations | Thirty-two authored cases covering three learner personas, happy paths, edge cases, and adversarial requests. |
 | OpenAI Codex | AI coding assistant used to interpret the guideline, scaffold code and documentation, identify security issues, and support testing. All outputs were reviewed by the team, who remain responsible for the design. |

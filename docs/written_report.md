@@ -37,6 +37,29 @@ A retrieval node supplies evidence before explanations. Scope responses handle u
 requests. Every path passes through output guardrails and persistence. This separation makes
 the graph inspectable and keeps agent responsibilities from overlapping.
 
+```mermaid
+flowchart LR
+    U["Learner"] --> M["Load session + profile memory"]
+    M --> G1["Input guardrails"]
+    G1 --> S["LangGraph supervisor"]
+    S -->|Learn or answer| R["Advanced retriever"]
+    R --> E["Explainer agent"]
+    S -->|Quiz| Q["Quiz agent"]
+    S -->|Progress| F["Feedback synthesizer"]
+    S -->|Plan| C["Curriculum planner"]
+    S -->|Outside scope| O["Scope response"]
+    E --> G2["Output guardrails"]
+    Q --> G2
+    F --> G2
+    C --> G2
+    O --> G2
+    G2 --> P["Persist memory + trace"]
+    P --> U
+```
+
+**Figure 1.** PyMentor uses bounded supervisor routing. Every response passes through
+output guardrails and persistence before the next learner interaction.
+
 ## 3. Advanced RAG strategy
 
 The knowledge base is split by semantic headings into overlapping chunks of approximately
