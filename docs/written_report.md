@@ -174,7 +174,7 @@ answer generation and remains runnable with either Groq or the local `qwen3:4b` 
 
 The public repository contains the complete runnable implementation and supporting evidence:
 
-- `src/pymentor/`: LangGraph workflow, specialist agents, hybrid retriever, memory, guardrails, and model providers
+- `src/python_tutor/`: LangGraph workflow, specialist agents, hybrid retriever, memory, guardrails, and model providers
 - `app.py`: Streamlit live-demo interface
 - `data/`: source-tagged introductory Python knowledge base
 - `evaluation/`: 32-case evaluation suite, RAGAS and LLM-judge scripts, and measured results
