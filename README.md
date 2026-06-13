@@ -158,6 +158,15 @@ Run the demo:
 streamlit run app.py
 ```
 
+The GUI includes:
+
+- A learner profile sidebar with ability, goals, session controls, and persistent memory
+- A branded dashboard showing strengths, focus areas, and stored memory signals
+- One-click concept, quiz, learning-plan, progress, and curriculum-topic actions
+- Source-grounded chat responses with confidence, guardrail, and personalization indicators
+- Expandable retrieval evidence and an explicit recommended next learning step
+- Responsive styling for desktop and narrow browser widths
+
 ## Test and evaluate
 
 Unit tests do not call an LLM:
