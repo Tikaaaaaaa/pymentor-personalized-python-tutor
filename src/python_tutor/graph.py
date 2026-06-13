@@ -20,7 +20,7 @@ from .prompts import (
     FEEDBACK_SYSTEM,
     QUIZ_SYSTEM,
 )
-from .rag import TutorRetriever
+from .rag import TutorRetriever, canonical_topic
 from .schemas import TutorState
 
 
@@ -36,13 +36,16 @@ class TutorGraph:
         graph.add_node("load_memory", self.load_memory)
         graph.add_node("input_guardrails", self.apply_input_guardrails)
         graph.add_node("supervisor", self.supervisor)
+        graph.add_node("query_analysis", self.query_analysis)
         graph.add_node("retrieve", self.retrieve)
+        graph.add_node("context_validation", self.context_validation)
         graph.add_node("explainer", self.explainer)
         graph.add_node("curriculum_planner", self.curriculum_planner)
         graph.add_node("quiz_agent", self.quiz_agent)
         graph.add_node("feedback_synthesizer", self.feedback_synthesizer)
         graph.add_node("scope_response", self.scope_response)
         graph.add_node("output_guardrails", self.apply_output_guardrails)
+        graph.add_node("memory_update", self.memory_update)
         graph.add_node("persist", self.persist)
 
         graph.add_edge(START, "load_memory")
@@ -52,14 +55,16 @@ class TutorGraph:
             "supervisor",
             self.route,
             {
-                "retrieve": "retrieve",
+                "query_analysis": "query_analysis",
                 "curriculum_planner": "curriculum_planner",
                 "quiz_agent": "quiz_agent",
                 "feedback_synthesizer": "feedback_synthesizer",
                 "scope_response": "scope_response",
             },
         )
-        graph.add_edge("retrieve", "explainer")
+        graph.add_edge("query_analysis", "retrieve")
+        graph.add_edge("retrieve", "context_validation")
+        graph.add_edge("context_validation", "explainer")
         for node in (
             "explainer",
             "curriculum_planner",
@@ -68,13 +73,18 @@ class TutorGraph:
             "scope_response",
         ):
             graph.add_edge(node, "output_guardrails")
-        graph.add_edge("output_guardrails", "persist")
+        graph.add_edge("output_guardrails", "memory_update")
+        graph.add_edge("memory_update", "persist")
         graph.add_edge("persist", END)
         return graph.compile()
 
     def load_memory(self, state: TutorState) -> dict:
+        """Load session, profile, and conversation memory before any routing."""
         return {
             "student_profile": self.memory.profile(state["student_id"]),
+            "session_memory": self.memory.session(
+                state["student_id"], state["session_id"]
+            ),
             "session_history": self.memory.history(
                 state["student_id"], state["session_id"]
             ),
@@ -82,6 +92,7 @@ class TutorGraph:
         }
 
     def apply_input_guardrails(self, state: TutorState) -> dict:
+        """Sanitize learner input and flag injection or direct-solution requests."""
         result = input_guardrail(state["message"])
         flags = list(state.get("guardrail_flags", [])) + result.flags
         if result.blocked:
@@ -95,6 +106,7 @@ class TutorGraph:
         return {"message": result.safe_text, "guardrail_flags": flags}
 
     def supervisor(self, state: TutorState) -> dict:
+        """Classify one bounded intent so exactly one specialist branch runs."""
         if "prompt_injection" in state.get("guardrail_flags", []):
             return {"intent": "out_of_scope", "topic": "security"}
         message = state["message"]
@@ -112,47 +124,88 @@ class TutorGraph:
         ):
             return {"intent": "progress", "topic": "progress"}
         if any(word in lowered for word in ("quiz", "test me", "question me")):
-            return {"intent": "quiz", "topic": _guess_topic(message)}
+            return {"intent": "quiz", "topic": canonical_topic(message)}
         if any(word in lowered for word in ("learning plan", "study plan", "what next")):
             return {"intent": "answer", "topic": "curriculum"}
         if not likely_in_scope(message):
             return {"intent": "out_of_scope", "topic": "outside_python"}
-        return {"intent": "learn", "topic": _guess_topic(message)}
+        return {"intent": "learn", "topic": canonical_topic(message)}
 
     @staticmethod
     def route(state: TutorState) -> Literal[
-        "retrieve",
+        "query_analysis",
         "curriculum_planner",
         "quiz_agent",
         "feedback_synthesizer",
         "scope_response",
     ]:
+        """Map the supervisor decision to one registered graph branch."""
         if "answer_withholding" in state.get("guardrail_flags", []):
-            return "retrieve"
+            return "query_analysis"
         if state.get("topic") == "curriculum":
             return "curriculum_planner"
         return {
-            "learn": "retrieve",
-            "answer": "retrieve",
+            "learn": "query_analysis",
+            "answer": "query_analysis",
             "quiz": "quiz_agent",
             "progress": "feedback_synthesizer",
             "out_of_scope": "scope_response",
         }.get(state.get("intent", "learn"), "curriculum_planner")
 
+    def query_analysis(self, state: TutorState) -> dict:
+        """Normalize the query and select relevant long-term learner evidence."""
+        topic = canonical_topic(state.get("topic") or state["message"])
+        misconceptions = [
+            item
+            for item in state["student_profile"].get("misconceptions", [])
+            if item.get("topic") == topic
+        ]
+        return {
+            "topic": topic,
+            "query_analysis": {
+                "original_query": state["message"],
+                "topic": topic,
+                "difficulty": state["student_profile"].get("ability", "beginner"),
+            },
+            "personalization_notes": _personalization_notes(
+                state["student_profile"], topic, misconceptions
+            ),
+        }
+
     def retrieve(self, state: TutorState) -> dict:
+        """Run hybrid retrieval and expose its confidence and validation reason."""
         profile = state["student_profile"]
-        contexts = self.retriever.advanced(
+        decision = self.retriever.retrieve(
             state["message"],
             topic=state.get("topic", ""),
             difficulty=profile.get("ability", "beginner"),
             top_k=4,
         )
-        confidence = min(1.0, (contexts[0]["score"] / 4.0)) if contexts else 0.0
-        return {"retrieved_contexts": contexts, "confidence": confidence}
+        return {
+            "retrieved_contexts": decision.contexts,
+            "confidence": decision.confidence,
+            "context_sufficient": decision.sufficient,
+            "retrieval_reason": decision.reason,
+            "query_analysis": {
+                **state.get("query_analysis", {}),
+                "normalized_query": decision.normalized_query,
+            },
+        }
+
+    def context_validation(self, state: TutorState) -> dict:
+        """Fail closed when evidence is too weak for a supported response."""
+        if state.get("context_sufficient") and state.get("retrieved_contexts"):
+            return {}
+        return {
+            "retrieved_contexts": [],
+            "context_sufficient": False,
+            "next_action": "Ask about a topic covered by the indexed Python curriculum.",
+        }
 
     def explainer(self, state: TutorState) -> dict:
+        """Generate a grounded explanation that explicitly uses relevant memory."""
         contexts = state.get("retrieved_contexts", [])
-        if not contexts or state.get("confidence", 0.0) < 0.12:
+        if not contexts or not state.get("context_sufficient", False):
             return {
                 "draft_response": (
                     "I do not have enough grounded course material to answer that confidently. "
@@ -163,6 +216,13 @@ class TutorGraph:
             }
         context_text = "\n\n".join(
             f"[{item['source_id']}] {item['text']}" for item in contexts
+        )
+        personalization_notes = state.get("personalization_notes", [])
+        personalization_instruction = (
+            "Use this learner history explicitly but naturally:\n- "
+            + "\n- ".join(personalization_notes)
+            if personalization_notes
+            else "No topic-specific learner history is available yet."
         )
         withholding = "answer_withholding" in state.get("guardrail_flags", [])
         instruction = (
@@ -176,6 +236,12 @@ class TutorGraph:
 
 Recent session:
 {json.dumps(state.get('session_history', [])[-6:], ensure_ascii=True)}
+
+Structured session memory:
+{json.dumps(state.get('session_memory', {}), ensure_ascii=True)}
+
+Personalization requirement:
+{personalization_instruction}
 
 Course context:
 {context_text}
@@ -196,12 +262,14 @@ Special instruction:
             )
         except LLMError:
             answer = _grounded_fallback(contexts, withholding)
+        answer = _apply_personalized_opening(answer, personalization_notes)
         return {
             "draft_response": answer,
             "next_action": "Answer the check-for-understanding question.",
         }
 
     def curriculum_planner(self, state: TutorState) -> dict:
+        """Recommend prerequisite-aware next steps from persistent evidence."""
         try:
             answer = self.llm.chat(
                 [
@@ -218,14 +286,29 @@ Special instruction:
         return {"draft_response": answer, "next_action": "Start the first recommended topic."}
 
     def quiz_agent(self, state: TutorState) -> dict:
+        """Create one level-calibrated, source-grounded quiz without its solution."""
         topic = state.get("topic") or "python fundamentals"
         profile = state["student_profile"]
-        contexts = self.retriever.advanced(
+        decision = self.retriever.retrieve(
             state["message"],
             topic=topic,
             difficulty=profile.get("ability", "beginner"),
             top_k=2,
         )
+        contexts = decision.contexts
+        if not decision.sufficient:
+            return {
+                "draft_response": (
+                    "I do not have enough indexed course material to create a reliable quiz "
+                    "for that topic. Choose variables, loops, functions, collections, "
+                    "exceptions, files, or classes."
+                ),
+                "retrieved_contexts": [],
+                "confidence": decision.confidence,
+                "context_sufficient": False,
+                "retrieval_reason": decision.reason,
+                "next_action": "Choose an indexed Python quiz topic.",
+            }
         context_text = "\n\n".join(
             f"[{item['source_id']}] {item['text']}" for item in contexts
         )
@@ -257,15 +340,17 @@ Special instruction:
                     f"Python quiz on {topic}: What value does `len([10, 20, 30])` return, "
                     "and why? Reply with your reasoning and answer."
                 )
-        confidence = min(1.0, contexts[0]["score"] / 4.0) if contexts else 0.0
         return {
             "draft_response": answer,
             "retrieved_contexts": contexts,
-            "confidence": confidence,
+            "confidence": decision.confidence,
+            "context_sufficient": decision.sufficient,
+            "retrieval_reason": decision.reason,
             "next_action": "Submit your quiz answer.",
         }
 
     def feedback_synthesizer(self, state: TutorState) -> dict:
+        """Summarize only persisted evidence of progress, strengths, and gaps."""
         try:
             answer = self.llm.chat(
                 [
@@ -287,6 +372,7 @@ Special instruction:
         return {"draft_response": answer, "next_action": "Continue with the recommended topic."}
 
     def scope_response(self, state: TutorState) -> dict:
+        """Return a deterministic refusal for injection or out-of-scope input."""
         if "prompt_injection" in state.get("guardrail_flags", []):
             response = (
                 "I cannot follow instructions that try to override the tutor's rules or reveal "
@@ -301,13 +387,51 @@ Special instruction:
         return {"draft_response": response, "confidence": 1.0, "next_action": "Ask a Python question."}
 
     def apply_output_guardrails(self, state: TutorState) -> dict:
+        """Redact secrets and block prompt leakage on every specialist path."""
         clean, flags = output_guardrail(state.get("draft_response", ""))
         return {
             "final_response": clean,
             "guardrail_flags": state.get("guardrail_flags", []) + flags,
         }
 
+    def memory_update(self, state: TutorState) -> dict:
+        """Update session state and structured misconceptions after a safe response."""
+        detected = _detect_misconception(state["message"])
+        confusion = ""
+        if detected:
+            self.memory.record_misconception(
+                state["student_id"],
+                detected["topic"],
+                detected["misconception"],
+                evidence=state["message"],
+                severity=detected["severity"],
+                recommended_fix=detected["recommended_fix"],
+            )
+            confusion = detected["misconception"]
+            profile = self.memory.profile(state["student_id"])
+            struggling = list(profile.get("struggling_topics", []))
+            if detected["topic"] not in struggling:
+                struggling.append(detected["topic"])
+            weaknesses = list(profile.get("weaknesses", []))
+            if detected["misconception"] not in weaknesses:
+                weaknesses.append(detected["misconception"])
+            self.memory.update_profile(
+                state["student_id"],
+                weaknesses=weaknesses,
+                struggling_topics=struggling,
+            )
+        self.memory.update_session(
+            state["student_id"],
+            state["session_id"],
+            topic=state.get("topic", ""),
+            current_question=state["message"],
+            confusion=confusion,
+            goal=state.get("next_action", ""),
+        )
+        return {}
+
     def persist(self, state: TutorState) -> dict:
+        """Persist the sanitized interaction after safety and memory updates."""
         self.memory.add_message(
             state["student_id"], state["session_id"], "user", state["message"]
         )
@@ -318,31 +442,6 @@ Special instruction:
             state["final_response"],
         )
         return {}
-
-
-def _guess_topic(text: str) -> str:
-    lowered = text.lower()
-    aliases = {
-        "variables": ("variable", "assignment", "= versus =="),
-        "types": ("type", "input return a string"),
-        "conditionals": ("conditional", "if", "elif", "else"),
-        "loops": ("loop", "range", "while", "for loop"),
-        "functions": ("function", "return", "argument", "parameter", "default"),
-        "lists": ("list", "comprehension", "mutable", "copy"),
-        "dictionaries": ("dictionary", "dict", "keyerror"),
-        "exceptions": ("exception", "error", "try", "except"),
-        "files": ("file", "open("),
-        "classes": ("class", "object", "inheritance", "composition"),
-        "recursion": ("recursion", "recursive"),
-    }
-    return next(
-        (
-            topic
-            for topic, terms in aliases.items()
-            if any(term in lowered for term in terms)
-        ),
-        "python fundamentals",
-    )
 
 
 def _grounded_fallback(contexts: list[dict], withholding: bool) -> str:
@@ -356,3 +455,67 @@ def _grounded_fallback(contexts: list[dict], withholding: bool) -> str:
         f"Based on [{contexts[0]['source_id']}]: {excerpt[:500]}... "
         "Can you explain the main idea back in your own words?"
     )
+
+
+def _personalization_notes(
+    profile: dict, topic: str, misconceptions: list[dict]
+) -> list[str]:
+    notes = []
+    if misconceptions:
+        item = misconceptions[0]
+        fix = item.get("recommended_fix") or "review it with a small example"
+        notes.append(f"you previously struggled with {item['misconception']}; {fix}")
+    if topic in profile.get("strengths", []):
+        notes.append(
+            f"{topic} is one of your recorded strengths, so include a deeper challenge"
+        )
+    if topic in profile.get("weaknesses", []) or topic in profile.get(
+        "struggling_topics", []
+    ):
+        notes.append(f"{topic} is a recorded weak area, so use slower scaffolding")
+    return notes
+
+
+def _apply_personalized_opening(answer: str, notes: list[str]) -> str:
+    if not notes:
+        return answer
+    return f"I remember that {notes[0]}. Let's focus there first.\n\n{answer}"
+
+
+def _detect_misconception(message: str) -> dict | None:
+    lowered = message.lower()
+    patterns = [
+        (
+            ("range includes", "range has the stop"),
+            "loops",
+            "range includes the stop value",
+            "practice exclusive stop values with small ranges",
+        ),
+        (
+            ("print and return are the same", "print gives the value back"),
+            "functions",
+            "print and return have the same purpose",
+            "trace where a returned value goes in the caller",
+        ),
+        (
+            ("= and == are the same", "both compare values"),
+            "variables",
+            "assignment and equality are interchangeable",
+            "contrast state change with Boolean comparison",
+        ),
+        (
+            ("recursion does not need a base case", "no base case"),
+            "recursion",
+            "recursion does not require a base case",
+            "practice stopping conditions before recursive steps",
+        ),
+    ]
+    for signals, topic, misconception, recommended_fix in patterns:
+        if any(signal in lowered for signal in signals):
+            return {
+                "topic": topic,
+                "misconception": misconception,
+                "severity": "high",
+                "recommended_fix": recommended_fix,
+            }
+    return None

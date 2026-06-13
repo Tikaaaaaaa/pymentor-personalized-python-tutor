@@ -247,7 +247,7 @@
       "scope_compliance": 1,
       "clarity": 1,
       "groundedness": 1,
-      "hint_first": 1,
+      "hint_first": 0,
       "error": ""
     },
     {
@@ -259,5 +259,5 @@
       "error": ""
     }
   ],
-  "pedagogical_compliance_rate": 1.0
+  "pedagogical_compliance_rate": 0.9921875
 }

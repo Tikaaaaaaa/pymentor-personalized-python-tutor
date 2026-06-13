@@ -21,19 +21,28 @@ and a reproducible evaluation suite.
   misconception log in SQLite.
 - **Guardrails:** prompt-injection defense, answer withholding, curriculum scope control,
   confidence calibration, secret redaction, and prompt-leakage protection.
-- **Evaluation:** 32 synthetic conversations, three learner personas, retrieval precision
-  and recall, routing accuracy, pedagogical compliance, grounding rate, P95 latency, an
-  optional LLM judge, and optional RAGAS evaluation.
+- **Evaluation:** 32 synthetic conversations, three learner personas, retrieval precision,
+  recall, MRR, hit@1, routing accuracy, pedagogical compliance, grounding rate, P95
+  latency, an Ollama LLM judge, and a controlled RAGAS comparison.
 
-## Architecture
+## Problem statement
+
+Generic tutors do not remember where a learner struggled, may answer from unsupported
+knowledge, and often give away assignment solutions. PyMentor addresses those failure modes
+with bounded agent routing, source-grounded teaching, persistent learner evidence, and
+deterministic safety checks around the model.
+
+## System architecture
 
 ```mermaid
 flowchart LR
     U["Learner"] --> M["Load session + profile memory"]
     M --> G1["Input guardrails"]
     G1 --> S["LangGraph supervisor"]
-    S -->|Learn or answer| R["Advanced retriever"]
-    R --> E["Explainer agent"]
+    S -->|Learn or answer| A["Query analysis"]
+    A --> R["Hybrid retriever + reranker"]
+    R --> V["Context validation"]
+    V --> E["Explainer agent"]
     S -->|Quiz| Q["Quiz agent"]
     S -->|Progress| F["Feedback synthesizer"]
     S -->|Plan| C["Curriculum planner"]
@@ -43,13 +52,62 @@ flowchart LR
     F --> G2
     C --> G2
     O --> G2
-    G2 --> P["Persist memory + trace"]
+    G2 --> MU["Memory update"]
+    MU --> P["Persist interaction + trace"]
     P --> U
 ```
 
 The graph state explicitly carries the learner message, intent, topic, profile, recent
-session history, retrieved chunks, confidence, guardrail flags, and final response.
-Routing is inspectable and bounded; the model does not control arbitrary code execution.
+session history, structured session memory, query analysis, retrieved chunks, validation
+reason, confidence, guardrail flags, personalization evidence, and final response. Routing
+is deterministic and bounded; the model cannot select arbitrary tools or execute code.
+
+### Node responsibilities
+
+| Node | Input | Output and reason |
+|---|---|---|
+| Load Memory | learner and session IDs | Loads working memory, long-term profile, misconceptions, and recent dialogue before routing. |
+| Input Guardrails | raw message | Sanitized message plus injection and answer-withholding flags. |
+| Supervisor | safe message | One explainable intent and topic. |
+| Query Analysis | intent, topic, profile | Normalized retrieval query and topic-specific personalization evidence. |
+| Retriever | analyzed query | Metadata-aware BM25-style candidates and deterministic reranking. |
+| Context Validation | ranked chunks | Confidence, sufficiency decision, and explicit rejection reason. |
+| Explainer | validated context and memory | Grounded teaching with a check question. |
+| Quiz Agent | topic and learner level | One grounded question without the solution. |
+| Curriculum Planner | persistent profile | Prerequisite-aware next steps. |
+| Feedback Synthesizer | stored evidence | Progress summary without invented performance. |
+| Memory Update | safe response and learner message | Session state plus structured misconception evidence. |
+| Persist | final state | Sanitized user/assistant interaction. |
+
+## Memory design
+
+PyMentor uses one SQLite database with three distinct logical layers:
+
+| Layer | Stored fields | How the tutor uses it |
+|---|---|---|
+| Session memory | topic, current question, confusion, goal, recent messages | Maintains continuity inside the active learning task. |
+| Long-term profile | level, goals, strengths, weaknesses, completed topics, progress | Calibrates difficulty and curriculum recommendations across sessions. |
+| Misconception memory | topic, misconception, evidence, frequency, severity, recommended fix | Forces future explanations to revisit a previously observed weakness. |
+
+For example, if the learner previously treated the stop value of `range` as inclusive, a
+later loops explanation begins by acknowledging that history and prioritizes exclusive-stop
+practice. The behavior is verified in `tests/test_graph_behavior.py` and
+`evaluation/personalization_evaluation.py`.
+
+## RAG pipeline
+
+```text
+Question -> query normalization -> retrieval decision -> BM25-style hybrid scoring
+         -> metadata boosts -> deterministic reranking -> relative-score filtering
+         -> context validation -> grounded generation or explicit uncertainty
+```
+
+The baseline retriever is preserved for comparison. The improved retriever expands topic
+aliases, combines lexical and metadata signals, reranks for coverage and concision, filters
+weak candidates, and rejects context when query coverage is insufficient. A large vector
+database was deliberately not added: the compact course corpus does not justify the
+operational dependency, and the current transparent scoring is easier to inspect in an oral
+defense. Embeddings remain a documented future extension for paraphrase-heavy queries.
 
 ## Setup
 
@@ -125,11 +183,41 @@ Run the controlled three-persona pre/post assessment:
 
 ```bash
 python evaluation/learning_assessment.py
+python evaluation/personalization_evaluation.py
+```
+
+Run the controlled baseline-versus-improved RAG quality comparison:
+
+```bash
+python evaluation/rag_quality_comparison.py --limit 10
 ```
 
 The report file at `evaluation/results/latest.json` contains the metrics and case-level
-evidence. Preserve this file before submission and copy its measured values into the
-written report. Do not claim placeholder metrics.
+evidence used in the written report.
+
+## Measured results
+
+Final measurements were produced locally with Ollama `qwen3:4b` on June 13, 2026.
+
+| Measure | Baseline | Improved / final |
+|---|---:|---:|
+| Retrieval context precision (20 labeled cases) | 0.679 | **0.946** |
+| Retrieval context recall | 0.950 | **1.000** |
+| Retrieval query-term relevance | 0.438 | **0.593** |
+| Mean reciprocal rank | 0.892 | **1.000** |
+| Hit@1 | 0.850 | **1.000** |
+| Controlled RAGAS faithfulness (10 cases) | 0.709 | **0.940** |
+| Controlled answer relevance | 0.512 | **0.590** |
+
+The complete 32-case system run achieved 1.000 deterministic pedagogical compliance,
+1.000 routing accuracy, and 1.000 grounded-response or safe-abstention rate. The independent
+LLM judge scored 0.992. P95 and median local latency were 31.21 and 22.01 seconds.
+
+The three-persona personalization evaluation achieved 1.000 memory-use, grounded-response,
+and teaching-check rates. The controlled RAGAS context-relevance score moved from 0.743 to
+0.718 because the improved pipeline deliberately returns fewer, narrower chunks; the broader
+20-case retrieval benchmark shows that the retained chunks have higher query coverage and
+substantially higher precision.
 
 ## Repository map
 
@@ -148,20 +236,40 @@ app.py                Streamlit live demo
    detection, and measurable pre/post learning.
 2. **Direct provider adapter:** keeps Groq and Ollama interchangeable without coupling
    graph logic to one SDK.
-3. **Hybrid retrieval:** term weighting, metadata boosts, title coverage, and reranking
-   are transparent enough to explain during the oral exam.
+3. **Validated hybrid retrieval:** query expansion, term weighting, metadata boosts,
+   title coverage, reranking, filtering, and confidence checks remain inspectable.
 4. **SQLite memory:** persistent, inspectable, easy to demo, and sufficient for the
    capstone scale.
 5. **Hint-first enforcement:** deterministic detection happens before model generation,
    so the policy does not depend only on prompt compliance.
 
+## Guardrail test matrix
+
+| Case | Expected behavior | Automated evidence |
+|---|---|---|
+| Direct assignment solution | Give a hint and Socratic question, not finished code | `test_required_guardrail_behaviors` |
+| Prompt injection | Refuse prompt disclosure and role override | `test_prompt_injection_is_blocked` |
+| Off-topic request | Redirect to the indexed Python curriculum | `test_required_guardrail_behaviors` |
+| Unknown Python knowledge | Admit insufficient grounded context | `test_context_validation_rejects_unknown_python_topics` |
+
+## Demonstrate personalization
+
+```bash
+python evaluation/personalization_evaluation.py
+```
+
+The script seeds beginner, intermediate, and advanced learner evidence, then invokes the
+real graph with deterministic fallback generation. Inspect
+`evaluation/results/personalization.json` to see the exact memory evidence used in each
+response.
+
 ## Known limitations
 
 - The current corpus is intentionally compact and should be expanded with instructor
   materials or official Python documentation before final evaluation.
-- Quiz grading and misconception extraction should be extended with explicit structured
-  schemas in the next iteration.
+- Misconception extraction is deliberately limited to high-precision known patterns; a
+  production system should add reviewed structured quiz grading.
 - The advanced retriever is lexical-hybrid rather than embedding-based, making it easy to
   run offline but weaker on paraphrases.
-- Final scores depend on the configured model and must be generated on the submission
-  machine.
+- Local Qwen can fall back to deterministic grounded output when it exhausts its answer
+  budget. This improves reliability but reduces stylistic variety.

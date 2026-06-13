@@ -8,7 +8,13 @@ from pathlib import Path
 
 from python_tutor.config import Settings
 from python_tutor.knowledge import load_chunks
-from python_tutor.rag import TutorRetriever, tokenize
+from python_tutor.rag import (
+    QUERY_STOPWORDS,
+    TOPIC_ALIASES,
+    TutorRetriever,
+    canonical_topic,
+    tokenize,
+)
 from python_tutor.service import TutorService
 
 
@@ -20,19 +26,45 @@ PERSONAS = {
 }
 
 
-def retrieval_metrics(results: list[dict], expected_topic: str) -> dict:
+def retrieval_metrics(results: list[dict], expected_topic: str, query: str) -> dict:
     if not results:
-        return {"context_precision": 0.0, "context_recall": 0.0}
-    expected_forms = {expected_topic.lower(), expected_topic.lower().rstrip("s")}
+        return {
+            "context_precision": 0.0,
+            "context_recall": 0.0,
+            "context_relevance": 0.0,
+            "reciprocal_rank": 0.0,
+            "hit_at_1": 0.0,
+        }
+    canonical_expected = canonical_topic(expected_topic, fallback=expected_topic.lower())
+    expected_forms = TOPIC_ALIASES.get(
+        canonical_expected,
+        {expected_topic.lower(), expected_topic.lower().rstrip("s")},
+    )
+    query_terms = set(tokenize(query)) - QUERY_STOPWORDS
     matches = []
+    relevance_scores = []
     for item in results:
         searchable = (
             item["topic"] + " " + item["section"] + " " + item["text"]
         ).lower()
-        matches.append(any(form and form in searchable for form in expected_forms))
+        resolved = canonical_topic(
+            f"{item['topic']} {item['section']}", fallback=""
+        )
+        relevant = resolved == canonical_expected or any(
+            form and form in searchable for form in expected_forms
+        )
+        matches.append(relevant)
+        context_terms = set(tokenize(searchable))
+        relevance_scores.append(
+            len(query_terms.intersection(context_terms)) / max(1, len(query_terms))
+        )
+    first_relevant = next((index for index, match in enumerate(matches, 1) if match), 0)
     return {
         "context_precision": sum(matches) / len(matches),
         "context_recall": float(any(matches)),
+        "context_relevance": sum(relevance_scores) / len(relevance_scores),
+        "reciprocal_rank": 1.0 / first_relevant if first_relevant else 0.0,
+        "hit_at_1": float(bool(matches[0])),
     }
 
 
@@ -49,17 +81,32 @@ def evaluate_retrieval(cases: list[dict]) -> dict:
             difficulty=case["persona"],
             top_k=4,
         )
+        grounded = (
+            bool(response.sources)
+            or response.intent in {"out_of_scope", "progress"}
+            or "not have enough grounded course material" in response.response.lower()
+        )
         rows.append(
             {
                 "id": case["id"],
-                "baseline": retrieval_metrics(baseline, case["expected_topic"]),
-                "advanced": retrieval_metrics(advanced, case["expected_topic"]),
+                "baseline": retrieval_metrics(
+                    baseline, case["expected_topic"], case["message"]
+                ),
+                "advanced": retrieval_metrics(
+                    advanced, case["expected_topic"], case["message"]
+                ),
             }
         )
+    baseline_summary = _average(rows, "baseline")
+    advanced_summary = _average(rows, "advanced")
     return {
         "cases": rows,
-        "baseline": _average(rows, "baseline"),
-        "advanced": _average(rows, "advanced"),
+        "baseline": baseline_summary,
+        "advanced": advanced_summary,
+        "improvement": {
+            metric: advanced_summary[metric] - baseline_summary[metric]
+            for metric in baseline_summary
+        },
     }
 
 
@@ -91,7 +138,10 @@ def evaluate_system(
                     else True
                 ),
                 "intent_pass": response.intent == expected_intent if expected_intent else True,
-                "grounded": bool(response.sources) or response.intent in {"out_of_scope", "progress"},
+                "grounded": grounded,
+                "confidence": response.confidence,
+                "retrieval_reason": response.retrieval_reason,
+                "personalization_applied": response.personalization_applied,
                 "response": response.response,
             }
         )
@@ -126,14 +176,20 @@ def evaluate_system(
         "median_latency_seconds": statistics.median(latencies),
         "cases": rows,
         "note": (
-            "Run evaluation/llm_judge.py for model-scored pedagogical compliance and "
-            "RAGAS faithfulness after configuring an API provider."
+            "Run evaluation/llm_judge.py for model-scored pedagogical compliance. "
+            "Run evaluation/rag_quality_comparison.py for controlled RAGAS faithfulness."
         ),
     }
 
 
 def _average(rows: list[dict], key: str) -> dict:
-    metrics = ("context_precision", "context_recall")
+    metrics = (
+        "context_precision",
+        "context_recall",
+        "context_relevance",
+        "reciprocal_rank",
+        "hit_at_1",
+    )
     return {
         metric: sum(row[key][metric] for row in rows) / max(1, len(rows))
         for metric in metrics

@@ -23,6 +23,25 @@ st.caption("A memory-aware, grounded Python tutor built with LangGraph")
 with st.sidebar:
     st.header("Learner")
     student_id = st.text_input("Student ID", value="demo-student")
+    profile = get_service().profile(student_id)
+    ability_options = ["beginner", "intermediate", "advanced"]
+    ability = st.selectbox(
+        "Current level",
+        ability_options,
+        index=ability_options.index(profile.get("ability", "beginner")),
+    )
+    goals_text = st.text_input(
+        "Learning goals",
+        value=", ".join(profile.get("goals", [])),
+        help="Comma-separated goals stored in long-term memory.",
+    )
+    if st.button("Save learner profile"):
+        get_service().update_profile(
+            student_id,
+            ability=ability,
+            goals=[item.strip() for item in goals_text.split(",") if item.strip()],
+        )
+        st.success("Long-term learner profile saved.")
     if "session_id" not in st.session_state:
         st.session_state.session_id = str(uuid.uuid4())
     if st.button("New session"):
@@ -31,6 +50,11 @@ with st.sidebar:
         st.rerun()
     st.write("Session:", st.session_state.session_id[:8])
     st.info("The tutor gives hints instead of complete homework solutions.")
+    with st.expander("Persistent memory"):
+        st.write("Strengths:", profile.get("strengths") or "None recorded")
+        st.write("Weaknesses:", profile.get("weaknesses") or "None recorded")
+        st.write("Completed topics:", profile.get("completed_topics") or "None recorded")
+        st.write("Misconceptions:", profile.get("misconceptions") or "None recorded")
 
 if "messages" not in st.session_state:
     st.session_state.messages = []
@@ -70,6 +94,15 @@ if prompt:
                             )
                 if result.guardrails_triggered:
                     st.caption("Guardrails: " + ", ".join(result.guardrails_triggered))
+                if result.personalization_applied:
+                    st.caption(
+                        "Personalization: " + " | ".join(result.personalization_applied)
+                    )
+                if result.retrieval_reason:
+                    st.caption(
+                        f"Retrieval confidence: {result.confidence:.2f} - "
+                        f"{result.retrieval_reason}"
+                    )
                 st.caption(f"Next: {result.next_action}")
                 st.session_state.messages.append(
                     {

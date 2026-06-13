@@ -31,6 +31,8 @@ class TutorResponse(BaseModel):
     guardrails_triggered: list[str] = Field(default_factory=list)
     next_action: str = ""
     confidence: float = Field(default=0.0, ge=0.0, le=1.0)
+    retrieval_reason: str = ""
+    personalization_applied: list[str] = Field(default_factory=list)
 
 
 class TutorState(TypedDict, total=False):
@@ -40,8 +42,13 @@ class TutorState(TypedDict, total=False):
     intent: Intent
     topic: str
     student_profile: dict
+    session_memory: dict
     session_history: list[dict]
+    query_analysis: dict
     retrieved_contexts: list[dict]
+    retrieval_reason: str
+    context_sufficient: bool
+    personalization_notes: list[str]
     guardrail_flags: list[str]
     draft_response: str
     final_response: str

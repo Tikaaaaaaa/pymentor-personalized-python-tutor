@@ -5,7 +5,7 @@
 **Team:** Seif Mohamed (202301506), Patrick Saweris (202301486)
 
 > Submission note: the exported report is kept below the eight-page maximum. Metrics below
-> come from the final local Ollama run on June 12, 2026.
+> come from the final local Ollama run on June 13, 2026.
 
 ## 1. Problem and objectives
 
@@ -22,7 +22,8 @@ versus equality, and print versus return can be represented explicitly.
 
 PyMentor is a LangGraph state machine. Its shared state contains the student and session
 identifiers, current message, routed intent, topic, student profile, recent dialogue,
-retrieved contexts, confidence, guardrail flags, draft, final response, and next action.
+structured session memory, query analysis, retrieved contexts, validation reason,
+confidence, guardrail flags, personalization evidence, draft, final response, and next action.
 
 The workflow begins by loading session and long-term memory. Deterministic input guardrails
 then inspect the message. A supervisor classifies the request and routes it to one of four
@@ -42,8 +43,10 @@ flowchart LR
     U["Learner"] --> M["Load session + profile memory"]
     M --> G1["Input guardrails"]
     G1 --> S["LangGraph supervisor"]
-    S -->|Learn or answer| R["Advanced retriever"]
-    R --> E["Explainer agent"]
+    S -->|Learn or answer| A["Query analysis"]
+    A --> R["Hybrid retriever + reranker"]
+    R --> V["Context validation"]
+    V --> E["Explainer agent"]
     S -->|Quiz| Q["Quiz agent"]
     S -->|Progress| F["Feedback synthesizer"]
     S -->|Plan| C["Curriculum planner"]
@@ -53,7 +56,8 @@ flowchart LR
     F --> G2
     C --> G2
     O --> G2
-    G2 --> P["Persist memory + trace"]
+    G2 --> MU["Memory update"]
+    MU --> P["Persist interaction + trace"]
     P --> U
 ```
 
@@ -74,29 +78,33 @@ during the oral exam, and supports controlled metadata personalization.
 
 Final retrieval results:
 
-| Pipeline | Context precision | Context recall |
-|---|---:|---:|
-| Naive overlap baseline | 0.517 | 0.850 |
-| Hybrid + metadata + reranking | 0.554 | 0.900 |
+| Pipeline | Precision | Recall | MRR | Hit@1 |
+|---|---:|---:|---:|---:|
+| Naive overlap baseline | 0.679 | 0.950 | 0.892 | 0.850 |
+| Hybrid + metadata + reranking | **0.946** | **1.000** | **1.000** | **1.000** |
 
-Official RAGAS faithfulness was 0.864 across 18 grounded teaching, withholding, and edge
-cases. Each generated explanation exposes source identifiers so grounded claims can be inspected.
-When retrieval confidence is weak, the tutor refuses to improvise and asks for an in-scope
-question.
+In a controlled 10-case comparison using the same extractive answer generator for both
+pipelines, RAGAS faithfulness improved from 0.709 to 0.940 and answer relevance from 0.512
+to 0.590. Controlled lexical context relevance moved from 0.743 to 0.718 because the final
+retriever returned fewer, narrower chunks; across the broader 20-case retrieval benchmark,
+query-term relevance improved from 0.438 to 0.593. Each explanation exposes source IDs, and
+weak evidence produces an explicit abstention rather than an improvised answer.
 
 ## 4. Memory and personalization
 
-SQLite provides four persistent structures:
+SQLite provides three logical memory layers across five persistent structures:
 
-- Session messages preserve complete conversational continuity.
-- Student profiles store ability, goals, mastered topics, and struggling topics.
+- Session memory stores the active topic, current question, confusion, goal, and messages.
+- Student profiles store ability, goals, strengths, weaknesses, completed topics, and progress.
 - Quiz attempts store topic, score, details, and timestamp.
-- The misconception log stores structured errors and occurrence counts.
+- The misconception log stores topic, error, evidence, frequency, severity, and recommended fix.
 
 The profile and recent dialogue are loaded before routing. Retrieval receives the student's
-ability as metadata, the curriculum planner prioritizes unresolved misconceptions, and the
-feedback agent uses only recorded evidence. This demonstrates personalization rather than
-merely storing chat history.
+ability as metadata, query analysis selects topic-specific misconception evidence, the
+Explainer is required to acknowledge relevant history, the curriculum planner prioritizes
+unresolved misconceptions, and the feedback agent uses only recorded evidence. A dedicated
+memory-update node writes session state and high-precision misconception signals before the
+interaction is persisted.
 
 ## 5. Pedagogical guardrails
 
@@ -135,12 +143,14 @@ Final system results:
 |---|---:|
 | Test conversations | 32 |
 | Deterministic pedagogical compliance | 1.000 |
-| LLM-judge pedagogical compliance | 1.000 |
+| LLM-judge pedagogical compliance | 0.992 |
 | Routing accuracy | 1.000 |
 | Grounded response rate | 1.000 |
-| RAGAS faithfulness (18 cases) | 0.864 |
-| P95 latency | 20.31 seconds |
-| Median latency | 15.13 seconds |
+| Controlled RAGAS faithfulness | 0.709 to 0.940 |
+| P95 latency | 31.21 seconds |
+| Median latency | 22.01 seconds |
+| Personalization memory-use rate | 1.000 |
+| Personalized grounded/check-question rates | 1.000 / 1.000 |
 | Beginner pre/post delta | 1.000 |
 | Intermediate pre/post delta | 0.333 |
 | Advanced pre/post delta | 0.000 |
@@ -148,9 +158,11 @@ Final system results:
 
 Post-improvement inspection found two practical failure classes: terse prompts were routed
 with insufficient vocabulary coverage, and Qwen sometimes exposed unfinished planning text.
-The final version expanded Python scope/topic aliases, grounded quiz generation with retrieved
-sources, strengthened direct-solution detection, and rejected reasoning signatures so the graph
-uses a deterministic grounded fallback. The corrected 32-case run contained no reasoning leaks.
+The final version expanded Python scope/topic aliases, added query and context validation,
+grounded quiz generation with retrieved sources, strengthened direct-solution detection, and
+rejected reasoning signatures so the graph uses a deterministic grounded fallback. The corrected
+32-case run contained no reasoning leaks. The LLM judge marked one terse equality explanation
+as not hint-first, producing the reported 0.992 rather than a rounded perfect score.
 
 ## 7. Limitations and future work
 
@@ -178,6 +190,6 @@ The public repository contains the complete runnable implementation and supporti
 - `app.py`: Streamlit live-demo interface
 - `data/`: source-tagged introductory Python knowledge base
 - `evaluation/`: 32-case evaluation suite, RAGAS and LLM-judge scripts, and measured results
-- `tests/`: 14 deterministic regression tests
+- `tests/`: 19 deterministic regression tests
 - `README.md` and `.env.example`: installation, configuration, Ollama setup, and run instructions
 - `docs/` and `deliverables/`: architecture, report, disclosure, and supporting documentation

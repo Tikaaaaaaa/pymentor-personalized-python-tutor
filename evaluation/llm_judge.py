@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import json
 from pathlib import Path
 
@@ -10,11 +11,27 @@ from python_tutor.llm import LLMClient, LLMError
 
 
 def main() -> None:
-    path = Path("evaluation/results/latest.json")
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--input",
+        type=Path,
+        default=Path("evaluation/results/latest.json"),
+        help="Live evaluation JSON containing system cases.",
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=Path("evaluation/results/llm_judge.json"),
+        help="Resumable LLM-judge output JSON.",
+    )
+    args = parser.parse_args()
+
+    path = args.input
     data = json.loads(path.read_text(encoding="utf-8"))
     cases = data.get("system", {}).get("cases", [])
     llm = LLMClient(Settings())
-    judge_path = Path("evaluation/results/llm_judge.json")
+    judge_path = args.output
+    judge_path.parent.mkdir(parents=True, exist_ok=True)
     output = {"provider": llm.provider, "rubric_version": 3, "cases": []}
     if judge_path.exists():
         previous = json.loads(judge_path.read_text(encoding="utf-8"))

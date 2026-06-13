@@ -99,15 +99,15 @@ def build_architecture_diagram():
     input_guard = (460, 300, 210, 90)
     supervisor = (710, 300, 190, 90)
     specialists = [
-        ((1010, 105, 220, 80), "Advanced Retriever", "hybrid retrieval"),
+        ((1010, 105, 220, 80), "RAG Pipeline", "analyze + retrieve + validate"),
         ((1010, 215, 220, 80), "Quiz Agent", "contextual exercise"),
         ((1010, 325, 220, 80), "Feedback", "progress and gaps"),
         ((1010, 435, 220, 80), "Planner", "learning path"),
         ((1010, 545, 220, 80), "Scope Response", "bounded redirect"),
     ]
     explainer = (1270, 105, 200, 80)
-    output_guard = (1515, 300, 205, 90)
-    persist = (1755, 300, 120, 90)
+    output_guard = (1500, 300, 205, 90)
+    persist = (1735, 300, 150, 90)
 
     box(*learner, "Learner", "Streamlit UI", colors["light_blue"])
     box(*memory, "Load Memory", "session + profile", colors["green"])
@@ -117,7 +117,7 @@ def build_architecture_diagram():
         box(*dimensions, node_title, subtitle, colors["light_blue"])
     box(*explainer, "Explainer", "grounded teaching", colors["light_blue"])
     box(*output_guard, "Output Guardrails", "redaction + leakage", colors["gold"])
-    box(*persist, "Persist", "state + trace", colors["green"])
+    box(*persist, "Memory", "update + persist", colors["green"])
 
     arrow([(175, 345), (215, 345)])
     arrow([(420, 345), (460, 345)])
@@ -152,11 +152,11 @@ def build_architecture_diagram():
             fill=colors["blue"],
             width=4,
         )
-    arrow([(merge_x, 345), (1515, 345)])
-    arrow([(1720, 345), (1755, 345)])
+    arrow([(merge_x, 345), (1500, 345)])
+    arrow([(1705, 345), (1735, 345)])
 
     arrow(
-        [(1815, 390), (1815, 680), (100, 680), (100, 390)],
+        [(1810, 390), (1810, 680), (100, 680), (100, 390)],
         colors["navy"],
         3,
     )
@@ -338,7 +338,8 @@ def build_report():
     doc.add_paragraph(
         "The application is a compiled LangGraph state machine. Shared state carries the "
         "student and session IDs, current message, routed intent, topic, profile, recent "
-        "dialogue, retrieved contexts, confidence, guardrail flags, draft response, and final response."
+        "dialogue, structured session memory, query analysis, retrieved contexts, validation "
+        "reason, confidence, guardrail flags, personalization evidence, and final response."
     )
     architecture_path = build_architecture_diagram()
     p = doc.add_paragraph()
@@ -362,13 +363,16 @@ def build_report():
             ("Load Memory", "Loads session history, profile, quiz history, and misconception log."),
             ("Input Guardrails", "Detects injection, truncates oversized input, and marks answer requests."),
             ("Supervisor", "Routes learning, quiz, progress, planning, and out-of-scope requests."),
-            ("Retriever", "Runs metadata-aware hybrid retrieval and reranking."),
+            ("Query Analysis", "Normalizes the question and selects relevant learner evidence."),
+            ("RAG Pipeline", "Runs hybrid retrieval, reranking, filtering, and confidence checks."),
+            ("Context Validation", "Rejects weak evidence before answer generation."),
             ("Explainer", "Produces grounded, level-calibrated teaching with a check question."),
             ("Quiz Agent", "Creates contextual exercises without revealing the solution."),
             ("Curriculum Planner", "Recommends prerequisite-aware next learning steps."),
             ("Feedback Synthesizer", "Summarizes evidence of mastery and remaining gaps."),
             ("Output Guardrails", "Redacts secrets and blocks prompt leakage."),
-            ("Persist", "Stores the interaction for current and future sessions."),
+            ("Memory Update", "Stores working state and structured misconception evidence."),
+            ("Persist", "Stores the sanitized interaction for current and future sessions."),
         ],
         [1900, 7460],
     )
@@ -389,15 +393,16 @@ def build_report():
         doc,
         ["Pipeline", "Context precision", "Context recall"],
         [
-            ("Naive lexical overlap", "0.517", "0.850"),
-            ("Hybrid + metadata + reranking", "0.554", "0.900"),
+            ("Naive lexical overlap", "0.679", "0.950"),
+            ("Hybrid + metadata + reranking", "0.946", "1.000"),
         ],
         [4800, 2280, 2280],
     )
     doc.add_paragraph(
-        "The final approach improved both measured metrics while remaining transparent enough "
-        "to explain during the oral exam. Retrieved source IDs are shown in the UI. If no "
-        "relevant context is available, the tutor states its limitation rather than inventing an answer."
+        "Mean reciprocal rank improved from 0.892 to 1.000 and hit@1 from 0.850 to 1.000. "
+        "In a controlled 10-case comparison using the same extractive generator, RAGAS "
+        "faithfulness improved from 0.709 to 0.940 and answer relevance from 0.512 to 0.590. "
+        "Retrieved source IDs are shown in the UI; weak evidence causes an explicit abstention."
     )
 
     doc.add_heading("4. Multi-Agent Design", level=1)
@@ -418,16 +423,17 @@ def build_report():
         doc,
         ["Memory layer", "Stored information", "Personalization use"],
         [
-            ("Session", "Ordered user and assistant messages", "Coherent follow-ups without repetition"),
-            ("Student profile", "Ability, goals, mastered and struggling topics", "Level-calibrated explanations"),
+            ("Session", "Topic, question, confusion, goal, and messages", "Maintains the active learning task"),
+            ("Student profile", "Level, goals, strengths, weaknesses, completed topics, progress", "Calibrates difficulty across sessions"),
             ("Quiz history", "Topic, score, details, timestamp", "Evidence-based progress summaries"),
-            ("Misconception log", "Specific error, topic, occurrence count", "Targets recurring misunderstandings"),
+            ("Misconception log", "Topic, error, evidence, frequency, severity, recommended fix", "Forces targeted review of recurring gaps"),
         ],
         [1800, 3300, 4260],
     )
     doc.add_paragraph(
-        "SQLite was selected because it is persistent, inspectable, transactional, and adequate "
-        "for the project scale. The same logical schema can move to PostgreSQL in production."
+        "A dedicated memory-update node writes working state and high-precision misconception "
+        "signals before persistence. SQLite is persistent, inspectable, transactional, and "
+        "adequate for the project scale; the same logical schema can move to PostgreSQL."
     )
 
     doc.add_heading("6. Guardrails", level=1)
@@ -450,21 +456,23 @@ def build_report():
     doc.add_paragraph(
         "The reproducible suite contains 32 conversations spanning normal teaching, quizzes, "
         "three learner levels, direct-solution requests, injection attacks, scope violations, "
-        "progress requests, and terse edge cases. Fourteen deterministic unit tests cover memory, "
+        "progress requests, and terse edge cases. Nineteen deterministic unit tests cover memory, "
         "retrieval, guardrails, learning assessment, and Qwen reasoning-output cleanup."
     )
     add_table(
         doc,
         ["Metric", "Result"],
         [
-            ("Unit tests", "14 passed"),
-            ("Retrieval precision improvement", "0.517 to 0.554"),
-            ("Retrieval recall improvement", "0.850 to 0.900"),
+            ("Unit tests", "19 passed"),
+            ("Retrieval precision improvement", "0.679 to 0.946"),
+            ("Retrieval recall improvement", "0.950 to 1.000"),
+            ("MRR / hit@1 improvement", "0.892 / 0.850 to 1.000 / 1.000"),
             ("Deterministic pedagogical compliance", "1.000"),
-            ("LLM-judge pedagogical compliance", "1.000"),
+            ("LLM-judge pedagogical compliance", "0.992"),
             ("Routing / grounded-response rate", "1.000 / 1.000"),
-            ("RAGAS faithfulness", "0.864 across 18 grounded cases"),
-            ("P95 / median latency", "20.31 s / 15.13 s"),
+            ("Controlled RAGAS faithfulness", "0.709 to 0.940 across 10 cases"),
+            ("P95 / median latency", "31.21 s / 22.01 s"),
+            ("Personalization memory / grounding / checks", "1.000 / 1.000 / 1.000"),
             ("Beginner pre/post quiz delta", "+1.000"),
             ("Intermediate pre/post quiz delta", "+0.333"),
             ("Advanced pre/post quiz delta", "0.000 (already mastered)"),
@@ -474,11 +482,12 @@ def build_report():
         [6000, 3360],
     )
     doc.add_paragraph(
-        "The final run used local Ollama qwen3:4b on June 12, 2026. Case inspection exposed "
+        "The final run used local Ollama qwen3:4b on June 13, 2026. Case inspection exposed "
         "unfinished Qwen planning text in early quiz responses. We expanded routing/topic aliases, "
         "grounded quiz generation with retrieved sources, strengthened direct-solution detection, "
         "and rejected reasoning signatures so the graph falls back to deterministic grounded output. "
-        "The corrected 32-case dataset contained no reasoning leaks."
+        "The corrected 32-case dataset contained no reasoning leaks. The LLM judge marked one "
+        "terse equality explanation as not hint-first, so its aggregate is reported as 0.992."
     )
 
     doc.add_heading("8. Reflection and Future Work", level=1)
@@ -512,7 +521,7 @@ def build_report():
             "app.py: Streamlit live-demo interface.",
             "data/: source-tagged introductory Python knowledge base.",
             "evaluation/: 32-case evaluation suite, RAGAS and LLM-judge scripts, and measured result files.",
-            "tests/: 14 deterministic regression tests.",
+            "tests/: 19 deterministic regression tests.",
             "README.md and .env.example: installation, configuration, Ollama setup, and run instructions.",
             "docs/ and deliverables/: architecture, written report, tool disclosure, and supporting documentation.",
         ],

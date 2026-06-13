@@ -1,0 +1,367 @@
+{
+  "retrieval": {
+    "cases": [
+      {
+        "id": "L01",
+        "baseline": {
+          "context_precision": 0.25,
+          "context_recall": 1.0,
+          "context_relevance": 0.3333333333333333,
+          "reciprocal_rank": 1.0,
+          "hit_at_1": 1.0
+        },
+        "advanced": {
+          "context_precision": 1.0,
+          "context_recall": 1.0,
+          "context_relevance": 0.6666666666666666,
+          "reciprocal_rank": 1.0,
+          "hit_at_1": 1.0
+        }
+      },
+      {
+        "id": "L02",
+        "baseline": {
+          "context_precision": 0.75,
+          "context_recall": 1.0,
+          "context_relevance": 0.25,
+          "reciprocal_rank": 1.0,
+          "hit_at_1": 1.0
+        },
+        "advanced": {
+          "context_precision": 1.0,
+          "context_recall": 1.0,
+          "context_relevance": 0.3333333333333333,
+          "reciprocal_rank": 1.0,
+          "hit_at_1": 1.0
+        }
+      },
+      {
+        "id": "L03",
+        "baseline": {
+          "context_precision": 1.0,
+          "context_recall": 1.0,
+          "context_relevance": 0.49999999999999994,
+          "reciprocal_rank": 1.0,
+          "hit_at_1": 1.0
+        },
+        "advanced": {
+          "context_precision": 1.0,
+          "context_recall": 1.0,
+          "context_relevance": 1.0,
+          "reciprocal_rank": 1.0,
+          "hit_at_1": 1.0
+        }
+      },
+      {
+        "id": "L04",
+        "baseline": {
+          "context_precision": 1.0,
+          "context_recall": 1.0,
+          "context_relevance": 0.41666666666666663,
+          "reciprocal_rank": 1.0,
+          "hit_at_1": 1.0
+        },
+        "advanced": {
+          "context_precision": 1.0,
+          "context_recall": 1.0,
+          "context_relevance": 0.5555555555555555,
+          "reciprocal_rank": 1.0,
+          "hit_at_1": 1.0
+        }
+      },
+      {
+        "id": "L05",
+        "baseline": {
+          "context_precision": 0.75,
+          "context_recall": 1.0,
+          "context_relevance": 0.1875,
+          "reciprocal_rank": 1.0,
+          "hit_at_1": 1.0
+        },
+        "advanced": {
+          "context_precision": 1.0,
+          "context_recall": 1.0,
+          "context_relevance": 0.3333333333333333,
+          "reciprocal_rank": 1.0,
+          "hit_at_1": 1.0
+        }
+      },
+      {
+        "id": "L06",
+        "baseline": {
+          "context_precision": 0.0,
+          "context_recall": 0.0,
+          "context_relevance": 0.3333333333333333,
+          "reciprocal_rank": 0.0,
+          "hit_at_1": 0.0
+        },
+        "advanced": {
+          "context_precision": 0.5,
+          "context_recall": 1.0,
+          "context_relevance": 0.3333333333333333,
+          "reciprocal_rank": 1.0,
+          "hit_at_1": 1.0
+        }
+      },
+      {
+        "id": "L07",
+        "baseline": {
+          "context_precision": 0.75,
+          "context_recall": 1.0,
+          "context_relevance": 0.49999999999999994,
+          "reciprocal_rank": 1.0,
+          "hit_at_1": 1.0
+        },
+        "advanced": {
+          "context_precision": 1.0,
+          "context_recall": 1.0,
+          "context_relevance": 0.55,
+          "reciprocal_rank": 1.0,
+          "hit_at_1": 1.0
+        }
+      },
+      {
+        "id": "L08",
+        "baseline": {
+          "context_precision": 0.75,
+          "context_recall": 1.0,
+          "context_relevance": 0.5,
+          "reciprocal_rank": 1.0,
+          "hit_at_1": 1.0
+        },
+        "advanced": {
+          "context_precision": 1.0,
+          "context_recall": 1.0,
+          "context_relevance": 0.8,
+          "reciprocal_rank": 1.0,
+          "hit_at_1": 1.0
+        }
+      },
+      {
+        "id": "L09",
+        "baseline": {
+          "context_precision": 0.5,
+          "context_recall": 1.0,
+          "context_relevance": 0.3125,
+          "reciprocal_rank": 1.0,
+          "hit_at_1": 1.0
+        },
+        "advanced": {
+          "context_precision": 1.0,
+          "context_recall": 1.0,
+          "context_relevance": 0.375,
+          "reciprocal_rank": 1.0,
+          "hit_at_1": 1.0
+        }
+      },
+      {
+        "id": "L10",
+        "baseline": {
+          "context_precision": 0.5,
+          "context_recall": 1.0,
+          "context_relevance": 0.25,
+          "reciprocal_rank": 1.0,
+          "hit_at_1": 1.0
+        },
+        "advanced": {
+          "context_precision": 1.0,
+          "context_recall": 1.0,
+          "context_relevance": 0.6666666666666666,
+          "reciprocal_rank": 1.0,
+          "hit_at_1": 1.0
+        }
+      },
+      {
+        "id": "Q01",
+        "baseline": {
+          "context_precision": 1.0,
+          "context_recall": 1.0,
+          "context_relevance": 0.5,
+          "reciprocal_rank": 1.0,
+          "hit_at_1": 1.0
+        },
+        "advanced": {
+          "context_precision": 1.0,
+          "context_recall": 1.0,
+          "context_relevance": 0.25,
+          "reciprocal_rank": 1.0,
+          "hit_at_1": 1.0
+        }
+      },
+      {
+        "id": "Q02",
+        "baseline": {
+          "context_precision": 0.75,
+          "context_recall": 1.0,
+          "context_relevance": 0.25,
+          "reciprocal_rank": 1.0,
+          "hit_at_1": 1.0
+        },
+        "advanced": {
+          "context_precision": 0.75,
+          "context_recall": 1.0,
+          "context_relevance": 0.375,
+          "reciprocal_rank": 1.0,
+          "hit_at_1": 1.0
+        }
+      },
+      {
+        "id": "Q03",
+        "baseline": {
+          "context_precision": 0.3333333333333333,
+          "context_recall": 1.0,
+          "context_relevance": 0.25,
+          "reciprocal_rank": 1.0,
+          "hit_at_1": 1.0
+        },
+        "advanced": {
+          "context_precision": 1.0,
+          "context_recall": 1.0,
+          "context_relevance": 0.25,
+          "reciprocal_rank": 1.0,
+          "hit_at_1": 1.0
+        }
+      },
+      {
+        "id": "Q04",
+        "baseline": {
+          "context_precision": 1.0,
+          "context_recall": 1.0,
+          "context_relevance": 0.5,
+          "reciprocal_rank": 1.0,
+          "hit_at_1": 1.0
+        },
+        "advanced": {
+          "context_precision": 1.0,
+          "context_recall": 1.0,
+          "context_relevance": 0.375,
+          "reciprocal_rank": 1.0,
+          "hit_at_1": 1.0
+        }
+      },
+      {
+        "id": "Q05",
+        "baseline": {
+          "context_precision": 1.0,
+          "context_recall": 1.0,
+          "context_relevance": 0.5,
+          "reciprocal_rank": 1.0,
+          "hit_at_1": 1.0
+        },
+        "advanced": {
+          "context_precision": 1.0,
+          "context_recall": 1.0,
+          "context_relevance": 0.5,
+          "reciprocal_rank": 1.0,
+          "hit_at_1": 1.0
+        }
+      },
+      {
+        "id": "E01",
+        "baseline": {
+          "context_precision": 0.5,
+          "context_recall": 1.0,
+          "context_relevance": 0.5,
+          "reciprocal_rank": 0.3333333333333333,
+          "hit_at_1": 0.0
+        },
+        "advanced": {
+          "context_precision": 1.0,
+          "context_recall": 1.0,
+          "context_relevance": 1.0,
+          "reciprocal_rank": 1.0,
+          "hit_at_1": 1.0
+        }
+      },
+      {
+        "id": "E02",
+        "baseline": {
+          "context_precision": 1.0,
+          "context_recall": 1.0,
+          "context_relevance": 1.0,
+          "reciprocal_rank": 1.0,
+          "hit_at_1": 1.0
+        },
+        "advanced": {
+          "context_precision": 1.0,
+          "context_recall": 1.0,
+          "context_relevance": 1.0,
+          "reciprocal_rank": 1.0,
+          "hit_at_1": 1.0
+        }
+      },
+      {
+        "id": "E03",
+        "baseline": {
+          "context_precision": 1.0,
+          "context_recall": 1.0,
+          "context_relevance": 0.8333333333333334,
+          "reciprocal_rank": 1.0,
+          "hit_at_1": 1.0
+        },
+        "advanced": {
+          "context_precision": 1.0,
+          "context_recall": 1.0,
+          "context_relevance": 0.8333333333333334,
+          "reciprocal_rank": 1.0,
+          "hit_at_1": 1.0
+        }
+      },
+      {
+        "id": "E04",
+        "baseline": {
+          "context_precision": 0.25,
+          "context_recall": 1.0,
+          "context_relevance": 0.5,
+          "reciprocal_rank": 0.5,
+          "hit_at_1": 0.0
+        },
+        "advanced": {
+          "context_precision": 0.6666666666666666,
+          "context_recall": 1.0,
+          "context_relevance": 0.6666666666666666,
+          "reciprocal_rank": 1.0,
+          "hit_at_1": 1.0
+        }
+      },
+      {
+        "id": "E05",
+        "baseline": {
+          "context_precision": 0.5,
+          "context_recall": 1.0,
+          "context_relevance": 0.3333333333333333,
+          "reciprocal_rank": 1.0,
+          "hit_at_1": 1.0
+        },
+        "advanced": {
+          "context_precision": 1.0,
+          "context_recall": 1.0,
+          "context_relevance": 1.0,
+          "reciprocal_rank": 1.0,
+          "hit_at_1": 1.0
+        }
+      }
+    ],
+    "baseline": {
+      "context_precision": 0.6791666666666667,
+      "context_recall": 0.95,
+      "context_relevance": 0.4375000000000001,
+      "reciprocal_rank": 0.8916666666666668,
+      "hit_at_1": 0.85
+    },
+    "advanced": {
+      "context_precision": 0.9458333333333334,
+      "context_recall": 1.0,
+      "context_relevance": 0.5931944444444445,
+      "reciprocal_rank": 1.0,
+      "hit_at_1": 1.0
+    },
+    "improvement": {
+      "context_precision": 0.2666666666666667,
+      "context_recall": 0.050000000000000044,
+      "context_relevance": 0.15569444444444436,
+      "reciprocal_rank": 0.10833333333333317,
+      "hit_at_1": 0.15000000000000002
+    }
+  }
+}
